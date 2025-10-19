@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的相册｜Birds & Landscapes</title>
+  <meta name="description" content="一个超简洁、无需后端的个人相册页面。把图片放进 images/ 并在下方列表里添加即可。" />
+  <style>
+    :root{--bg:#0b0d10;--panel:#0f1217;--text:#e7ecf3;--muted:#a8b3c7;--border:#1c2230;--brand:#7aa2ff}
+    @media (prefers-color-scheme: light){:root{--bg:#f6f7fb;--panel:#fff;--text:#0e1116;--muted:#5b677a;--border:#e6e9ef;--brand:#3b6cff}}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial; background:var(--bg); color:var(--text)}
+    .container{max-width:1100px;margin:0 auto;padding:20px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:color-mix(in oklab,var(--bg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 20px;z-index:5}
+    h1{font-size:clamp(22px,4vw,28px);margin:0}
+    .muted{color:var(--muted)}
+    .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:16px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    .card img{width:100%;height:220px;object-fit:cover;display:block}
+    .cap{padding:10px 12px;font-size:13px;color:var(--muted)}
+    .filters{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+    input[type="search"]{width:260px;max-width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text)}
+    .chip{font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:color-mix(in oklab,var(--panel) 85%,transparent);cursor:pointer}
+    .chip.active{outline:2px solid color-mix(in oklab,var(--brand) 70%,white)}
+    footer{color:var(--muted);font-size:13px;margin:24px 0}
+
+    /* 轻量灯箱 */
+    .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:10}
+    .lightbox.open{display:flex}
+    .lightbox img{max-width:95vw;max-height:90vh;object-fit:contain}
+    .lightbox .caption{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.4);padding:6px 10px;border-radius:8px;font-size:14px}
+    .lightbox .close{position:fixed;top:14px;right:16px;color:#fff;background:transparent;border:1px solid rgba(255,255,255,.35);padding:6px 10px;border-radius:10px;cursor:pointer}
+    .brand{color:var(--brand)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>我的相册 <span class="muted">｜Birds & Landscapes</span></h1>
+    <a class="brand" href="#" title="返回顶部">↑ Top</a>
+  </header>
+  <main class="container">
+    <p class="muted">⚡ 无需后端的纯静态相册。把图片放到 <code>images/</code> 文件夹，并在下方 <code>IMAGES</code> 列表里添加文件名即可。建议先把长边压到 1600px、转 WebP/JPEG。</p>
+
+    <div class="filters">
+      <input id="q" type="search" placeholder="搜索：物种 / 地点 / 标签…" oninput="render()" />
+      <button class="chip" data-tag="鸟类" onclick="toggleTag(this)">鸟类</button>
+      <button class="chip" data-tag="风光" onclick="toggleTag(this)">风光</button>
+    </div>
+
+    <section id="gallery" class="gallery" aria-live="polite"></section>
+
+    <footer>© <span id="year"></span> Me. Built with a single HTML file.</footer>
+  </main>
+
+  <!-- 仅需编辑这一段：添加你的图片条目 -->
+  <script>
+  // 📂 把原图放到 /images 目录。每条记录：src（必填）、alt（描述）、tags（可选数组）。
+  const IMAGES = [
+    { src: 'images/bird01.jpg', alt: 'Black-capped Chickadee · On pine branch · 2024-12 · Syracuse', tags:['鸟类'] },
+    { src: 'images/bird02.jpg', alt: 'American Robin · Early spring', tags:['鸟类'] },
+    { src: 'images/landscape01.jpg', alt: 'Golden hour over Onondaga Lake', tags:['风光'] },
+    // 在此继续添加：{ src: 'images/xxx.webp', alt: '描述', tags:['鸟类','风光'] },
+  ];
+  </script>
+
+  <script>
+    const el = (sel) => document.querySelector(sel);
+    const gallery = el('#gallery');
+    const q = el('#q');
+    const activeTags = new Set();
+
+    function toggleTag(btn){
+      const t = btn.dataset.tag; 
+      if(activeTags.has(t)) { activeTags.delete(t); btn.classList.remove('active'); }
+      else { activeTags.add(t); btn.classList.add('active'); }
+      render();
+    }
+
+    function match(img){
+      const text = (img.alt + ' ' + (img.tags||[]).join(' ')).toLowerCase();
+      const okQ = !q.value || text.includes(q.value.trim().toLowerCase());
+      const okTag = activeTags.size===0 || (img.tags||[]).some(t=>activeTags.has(t));
+      return okQ && okTag;
+    }
+
+    function render(){
+      gallery.innerHTML = '';
+      IMAGES.filter(match).forEach((img, i)=>{
+        const card = document.createElement('article');
+        card.className = 'card';
+        const a = document.createElement('a');
+        a.href = img.src; a.dataset.index = i;
+        const im = document.createElement('img');
+        im.loading = 'lazy';
+        im.decoding = 'async';
+        im.alt = img.alt || '';
+        im.src = img.src; // 如果你有缩略图，可改为 thumb；点击再看原图
+        a.appendChild(im);
+        a.addEventListener('click', (e)=>{ e.preventDefault(); openLightbox(i); });
+        const cap = document.createElement('div');
+        cap.className = 'cap';
+        cap.textContent = img.alt || '';
+        card.appendChild(a); card.appendChild(cap);
+        gallery.appendChild(card);
+      });
+    }
+
+    // 轻量灯箱
+    const lb = document.createElement('div');
+    lb.className = 'lightbox';
+    lb.innerHTML = '<button class="close" aria-label="关闭" onclick="closeLightbox()">关闭 Esc</button><img alt=""/><div class="caption"></div>';
+    document.body.appendChild(lb);
+    const lbImg = lb.querySelector('img');
+    const lbCap = lb.querySelector('.caption');
+    let cur = -1;
+
+    function openLightbox(i){
+      cur = i; const item = IMAGES[i];
+      lbImg.src = item.src; lbImg.alt = item.alt || '';
+      lbCap.textContent = item.alt || '';
+      lb.classList.add('open');
+    }
+    function closeLightbox(){ lb.classList.remove('open'); cur = -1; }
+    lb.addEventListener('click', (e)=>{ if(e.target===lb) closeLightbox(); });
+    window.addEventListener('keydown', (e)=>{
+      if(!lb.classList.contains('open')) return;
+      if(e.key==='Escape') closeLightbox();
+      if(e.key==='ArrowRight') { if(cur < IMAGES.length-1) openLightbox(cur+1); }
+      if(e.key==='ArrowLeft') { if(cur > 0) openLightbox(cur-1); }
+    });
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+    render();
+  </script>
+</body>
+</html>
